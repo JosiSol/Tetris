@@ -33,7 +33,7 @@ This is a fully functional **Tetris** game built with **Python** and **Pygame**,
 | ↓            | Soft drop        |
 | Space        | Hard drop        |
 | Shift (L/R)  | Hold piece       |
-| ESC / Quit   | Exit the game    |
+| ESC          | Pause Menu       |
 
 ---
 
