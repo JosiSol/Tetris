@@ -238,6 +238,47 @@ def show_game_over_screen(level, score):
                     pygame.quit()
                     exit()
 
+def show_pause_menu():
+    screen.fill(BG_COLOR)
+
+    font_large = pygame.font.Font(None, 72)
+    font_small = pygame.font.Font(None, 36)
+
+    pause_text = font_large.render("PAUSED", True, WHITE)
+    screen.blit(pause_text, (SCREEN_WIDTH // 2 - pause_text.get_width() // 2, 100))
+
+    continue_button = pygame.Rect(SCREEN_WIDTH // 2 - 100, 200, 200, 50)
+    restart_button = pygame.Rect(SCREEN_WIDTH // 2 - 100, 300, 200, 50)
+    quit_button = pygame.Rect(SCREEN_WIDTH // 2 - 100, 400, 200, 50)
+
+    pygame.draw.rect(screen, (0, 200, 0), continue_button)
+    pygame.draw.rect(screen, (0, 0, 200), restart_button)
+    pygame.draw.rect(screen, (200, 0, 0), quit_button)
+
+    continue_text = font_small.render("Continue", True, WHITE)
+    restart_text = font_small.render("Restart", True, WHITE)
+    quit_text = font_small.render("Quit", True, WHITE)
+
+    screen.blit(continue_text, (continue_button.x + continue_button.width // 2 - continue_text.get_width() // 2, continue_button.y + 10))
+    screen.blit(restart_text, (restart_button.x + restart_button.width // 2 - restart_text.get_width() // 2, restart_button.y + 10))
+    screen.blit(quit_text, (quit_button.x + quit_button.width // 2 - quit_text.get_width() // 2, quit_button.y + 10))
+
+    pygame.display.flip()
+
+    while True:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                exit()
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                if continue_button.collidepoint(event.pos):
+                    return "continue"
+                if restart_button.collidepoint(event.pos):
+                    return "restart"
+                if quit_button.collidepoint(event.pos):
+                    pygame.quit()
+                    exit()
+
 def main():
     global score, grid
     while True:
@@ -251,100 +292,116 @@ def main():
         move_time = 0
         move_delay = 10
         level, fall_speed = calculate_level_and_speed(score)
-
+        
         keys_pressed = {"left": False, "right": False, "down": False}
         tetromino_placed = False
+        paused = False
+        pause_restart = False
 
         running = True
         while running:
-            screen.fill(BG_COLOR)
-            draw_ui_background()
-            draw_grid()
-            draw_score()
-            draw_level(level)
-            draw_next_tetromino(next_tetromino)
-            draw_held_tetromino(held_tetromino)
-            draw_controls_legend()
-            draw_ghost_tetromino(tetromino)
+            if not paused:
+                screen.fill(BG_COLOR)
+                draw_ui_background()
+                draw_grid()
+                draw_score()
+                draw_level(level)
+                draw_next_tetromino(next_tetromino)
+                draw_held_tetromino(held_tetromino)
+                draw_controls_legend()
+                draw_ghost_tetromino(tetromino)
 
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
+                for event in pygame.event.get():
+                    if event.type == pygame.QUIT:
+                        pygame.quit()
+                        exit()
+                    if event.type == pygame.KEYDOWN:
+                        if event.key == pygame.K_LEFT:
+                            keys_pressed["left"] = True
+                        if event.key == pygame.K_RIGHT:
+                            keys_pressed["right"] = True
+                        if event.key == pygame.K_DOWN:
+                            keys_pressed["down"] = True
+                        if event.key == pygame.K_UP:
+                            tetromino = rotate_tetromino(tetromino)
+                        if event.key == pygame.K_SPACE:
+                            tetromino = hard_drop(tetromino)
+                            tetromino_placed = True
+                        if event.key == pygame.K_LSHIFT or event.key == pygame.K_RSHIFT:
+                            if can_hold:
+                                if held_tetromino:
+                                    tetromino, held_tetromino = held_tetromino, tetromino
+                                    tetromino["x"] = PLAY_AREA_WIDTH // BLOCK_SIZE // 2 - len(tetromino["shape"][0]) // 2
+                                    tetromino["y"] = 0
+                                else:
+                                    held_tetromino = tetromino
+                                    tetromino = next_tetromino
+                                    next_tetromino = new_tetromino()
+                                can_hold = False
+                        if event.key == pygame.K_ESCAPE:
+                            paused = True
+                    if event.type == pygame.KEYUP:
+                        if event.key == pygame.K_LEFT:
+                            keys_pressed["left"] = False
+                        if event.key == pygame.K_RIGHT:
+                            keys_pressed["right"] = False
+                        if event.key == pygame.K_DOWN:
+                            keys_pressed["down"] = False
+
+                move_time += clock.get_rawtime()
+                if move_time >= move_delay:
+                    move_time = 0
+                    if keys_pressed["left"] and can_move(tetromino, -1, 0):
+                        tetromino["x"] -= 1
+                    if keys_pressed["right"] and can_move(tetromino, 1, 0):
+                        tetromino["x"] += 1
+
+                if keys_pressed["down"] and can_move(tetromino, 0, 1):
+                    tetromino["y"] += 1
+
+                fall_time += clock.get_rawtime()
+                if fall_time >= fall_speed:
+                    fall_time = 0
+                    if can_move(tetromino, 0, 1):
+                        tetromino["y"] += 1
+                    else:
+                        tetromino_placed = True
+
+                if tetromino_placed:
+                    place_tetromino(tetromino)
+                    clear_lines_with_effect()
+                    level, fall_speed = calculate_level_and_speed(score)
+                    tetromino = next_tetromino
+                    next_tetromino = new_tetromino()
+                    can_hold = True
+                    if not can_move(tetromino, 0, 0):
+                        running = False
+                    tetromino_placed = False
+
+                for y, row in enumerate(tetromino["shape"]):
+                    for x, cell in enumerate(row):
+                        if cell:
+                            pygame.draw.rect(screen, COLORS[tetromino["color"] - 1], ((tetromino["x"] + x) * BLOCK_SIZE, (tetromino["y"] + y) * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE))
+
+                pygame.display.flip()
+                clock.tick(30)
+            else:
+                choice = show_pause_menu()
+                if choice == "continue":
+                    paused = False
+                elif choice == "restart":
+                    pause_restart = True
+                    break
+                elif choice == "quit":
                     pygame.quit()
                     exit()
-                if event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_LEFT:
-                        keys_pressed["left"] = True
-                    if event.key == pygame.K_RIGHT:
-                        keys_pressed["right"] = True
-                    if event.key == pygame.K_DOWN:
-                        keys_pressed["down"] = True
-                    if event.key == pygame.K_UP:
-                        tetromino = rotate_tetromino(tetromino)
-                    if event.key == pygame.K_SPACE:
-                        tetromino = hard_drop(tetromino)
-                        tetromino_placed = True
-                    if event.key == pygame.K_LSHIFT or event.key == pygame.K_RSHIFT:
-                        if can_hold:
-                            if held_tetromino:
-                                tetromino, held_tetromino = held_tetromino, tetromino
-                                tetromino["x"] = PLAY_AREA_WIDTH // BLOCK_SIZE // 2 - len(tetromino["shape"][0]) // 2
-                                tetromino["y"] = 0
-                            else:
-                                held_tetromino = tetromino
-                                tetromino = next_tetromino
-                                next_tetromino = new_tetromino()
-                            can_hold = False
-                if event.type == pygame.KEYUP:
-                    if event.key == pygame.K_LEFT:
-                        keys_pressed["left"] = False
-                    if event.key == pygame.K_RIGHT:
-                        keys_pressed["right"] = False
-                    if event.key == pygame.K_DOWN:
-                        keys_pressed["down"] = False
 
-            move_time += clock.get_rawtime()
-            if move_time >= move_delay:
-                move_time = 0
-                if keys_pressed["left"] and can_move(tetromino, -1, 0):
-                    tetromino["x"] -= 1
-                if keys_pressed["right"] and can_move(tetromino, 1, 0):
-                    tetromino["x"] += 1
-
-            if keys_pressed["down"] and can_move(tetromino, 0, 1):
-                tetromino["y"] += 1
-
-            fall_time += clock.get_rawtime()
-            if fall_time >= fall_speed:
-                fall_time = 0
-                if can_move(tetromino, 0, 1):
-                    tetromino["y"] += 1
-                else:
-                    tetromino_placed = True
-
-            if tetromino_placed:
-                place_tetromino(tetromino)
-                clear_lines_with_effect()
-                level, fall_speed = calculate_level_and_speed(score)
-                tetromino = next_tetromino
-                next_tetromino = new_tetromino()
-                can_hold = True
-                if not can_move(tetromino, 0, 0):
-                    running = False
-                tetromino_placed = False
-
-            for y, row in enumerate(tetromino["shape"]):
-                for x, cell in enumerate(row):
-                    if cell:
-                        pygame.draw.rect(screen, COLORS[tetromino["color"] - 1], ((tetromino["x"] + x) * BLOCK_SIZE, (tetromino["y"] + y) * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE))
-
-            pygame.display.flip()
-            clock.tick(30)
-
-        choice = show_game_over_screen(level, score)
-        if choice == "restart":
-            continue
-        else:
-            break
+        if not pause_restart:
+            choice = show_game_over_screen(level, score)
+            if choice == "restart":
+                continue
+            else:
+                break
 
 if __name__ == "__main__":
     main()
